@@ -11,10 +11,10 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 
-#define PATH_MAX 1000
+#define PATH_MAX 4096
 
-void convert_to_grayscale(const char *input_path, const char *output_path) {
-    int input_file = open(input_path, O_RDONLY);
+void convert_to_grayscale(const char *input_path) {
+    int input_file = open(input_path, O_RDWR);
     if (input_file == -1) {
         perror("open");
         exit(EXIT_FAILURE);
@@ -50,39 +50,22 @@ void convert_to_grayscale(const char *input_path, const char *output_path) {
         unsigned char green = original_image[i + 1];
         unsigned char red = original_image[i + 2];
 
-
         unsigned char grayscale = (unsigned char)(0.299 * red + 0.587 * green + 0.114 * blue);
 
         original_image[i] = original_image[i + 1] = original_image[i + 2] = grayscale;
     }
 
-    int output_file = open(output_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (output_file == -1) {
-        perror("open");
-        free(original_image);
-        close(input_file);
-        exit(EXIT_FAILURE);
-    }
-
-    if (write(output_file, header, sizeof(header)) != sizeof(header)) {
+    // Move file pointer to the beginning and write the modified pixel data
+    lseek(input_file, sizeof(header), SEEK_SET);
+    if (write(input_file, original_image, size) != size) {
         perror("write");
         free(original_image);
         close(input_file);
-        close(output_file);
-        exit(EXIT_FAILURE);
-    }
-
-    if (write(output_file, original_image, size) != size) {
-        perror("write");
-        free(original_image);
-        close(input_file);
-        close(output_file);
         exit(EXIT_FAILURE);
     }
 
     free(original_image);
     close(input_file);
-    close(output_file);
 }
 
 void process_entry(const char *input_path, const struct dirent *entry, const char *output_dir) {
@@ -98,7 +81,7 @@ void process_entry(const char *input_path, const struct dirent *entry, const cha
             snprintf(output_file_path, sizeof(output_file_path), "%s/%s_gri.bmp", output_dir, entry->d_name);
 
             // Child process for BMP conversion
-            convert_to_grayscale(input_full_path, output_file_path);
+            convert_to_grayscale(input_full_path);
 
             exit(EXIT_SUCCESS);
         } else if (bmp_child_pid < 0) {
@@ -121,7 +104,7 @@ void process_entry(const char *input_path, const struct dirent *entry, const cha
 
         // Process the entry and write information to the output file
         struct stat buffer;
-        char sbuffer[100];
+        char sbuffer[500];
 
         if (lstat(input_full_path, &buffer) == -1) {
             perror("lstat");
@@ -245,7 +228,7 @@ void process_entry(const char *input_path, const struct dirent *entry, const cha
         snprintf(output_file_path, sizeof(output_file_path), "%s/%s_gri.bmp", output_dir, entry->d_name);
 
         // Child process for BMP conversion
-        convert_to_grayscale(input_full_path, output_file_path);
+        convert_to_grayscale(input_full_path);
 
         exit(EXIT_SUCCESS);
     } else if (bmp_child_pid < 0) {
